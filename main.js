@@ -1,50 +1,14 @@
 const { app, BrowserWindow } = require('electron')
 
-var kafka = require('kafka-node');
-var Consumer = kafka.Consumer;
-var Offset = kafka.Offset;
-var Client = kafka.Client;
-var argv = {
-  topic: "skynet.topic"
-};
-var topic = argv.topic;
+var kafkaListener = require('./lib/listener/kafkaListener')
+var kafkaMessageEvent = require('./lib/event/kafkaMessageEvent')
+var rfqMessageHandler = require('./lib/handler/rfqMessageHandler')
 
-var client = new Client('192.168.2.104:2181');
-var topics = [{
-  topic: topic,
-  partition: 0
-}, {
-  topic: topic,
-  partition: 1
-}],
-  options = {
-    autoCommit: false,
-    fetchMaxWaitMs: 1000,
-    fetchMaxBytes: 1024 * 1024,
-    fromOffset: true
-  };
-
-var consumer = new Consumer(client, topics, options);
-var offset = new Offset(client);
-
-//consumer.setOffset(topic, 0, 36);
-consumer.on('message', function (message) {
-  console.log('message', message);
-});
-
-consumer.on('error', function (err) {
-  console.log('error', err);
-});
-
-consumer.on('offsetOutOfRange', function (topic) {
-  topic.maxNum = 2;
-  offset.fetch([topic], function (err, offsets) {
-    var min = Math.min.apply(null, offsets[topic.topic][topic.partition]);
-    consumer.setOffset(topic.topic, topic.partition, min);
-  });
-});
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
+
+var rfqMessageMap = new Map()
+
 let win
 
 function createWindow() {
@@ -66,10 +30,53 @@ function createWindow() {
   })
 }
 
+rfqMessageHandler.initRenderRfqMessage(function (event, templateKey) {
+  if (rfqMessageMap.has(templateKey)) {
+    var rfqMessages = rfqMessageMap.get(templateKey)
+    if (rfqMessages != undefined && rfqMessages != null) {
+      event.sender.send(templateKey, rfqMessages)
+    }
+  }
+})
+
+kafkaMessageEvent.onMessage(function (message) {
+  var rfqMessage = eval("(" + message + ")")
+  // console.log('rfqMessage:')
+  // console.log(rfqMessage)
+  var templateKey = rfqMessage.rfqProperties[0].value
+  var rfqId = rfqMessage.rfqHeader.rfqId
+  console.log('tempalteKey: ' + templateKey)
+  console.log('rfqId: ' + rfqId)
+  if (rfqMessageMap.has(templateKey)) {
+    var rfqMessages = rfqMessageMap.get(templateKey)
+    if (rfqMessages == undefined || rfqMessages == null) {
+      rfqMessages = new Array()
+    }
+    // rfqMessages.forEach(element => {
+    //   if(element.rfqHeader.rfqId == rfqId){
+
+    //   }
+    // })
+    rfqMessages.push(rfqMessage)
+    rfqMessageMap.set(templateKey, rfqMessages)
+  } else {
+    var rfqMessages = new Array()
+    rfqMessages.push(rfqMessage)
+    rfqMessageMap.set(templateKey, rfqMessages)
+  }
+
+  if (win == null) {
+    createWindow();
+  }
+  else {
+    win.webContents.send(templateKey, rfqMessage)
+  }
+})
+
 // Electron 会在初始化后并准备
 // 创建浏览器窗口时，调用这个函数。
 // 部分 API 在 ready 事件触发后才能使用。
-app.on('ready', createWindow)
+// app.on('ready', createWindow)
 
 // 当全部窗口关闭时退出。
 app.on('window-all-closed', () => {

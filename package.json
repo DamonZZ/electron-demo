@@ -11,6 +11,6 @@
   "license": "ISC",
   "devDependencies": {
     "electron": "^2.0.4",
-    "kafka-node": "^2.6.1"
+    "kafka-node": "^3.0.1"
   }
 }
