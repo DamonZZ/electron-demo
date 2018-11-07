@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, Menu } = require('electron')
 
 var kafkaListener = require('./lib/listener/kafkaListener')
 var kafkaMessageEvent = require('./lib/event/kafkaMessageEvent')
@@ -6,14 +6,14 @@ var rfqMessageHandler = require('./lib/handler/rfqMessageHandler')
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-
 var rfqMessageMap = new Map()
+var winMap = new Map()
+// let win
 
-let win
+function createWindow(templateKey) {
 
-function createWindow() {
   // 创建浏览器窗口。
-  win = new BrowserWindow({ width: 800, height: 600 })
+  var win = new BrowserWindow({ width: 800, height: 600 })
 
   // 然后加载应用的 index.html。
   win.loadFile('index.html')
@@ -27,7 +27,11 @@ function createWindow() {
     // 通常会把多个 window 对象存放在一个数组里面，
     // 与此同时，你应该删除相应的元素。
     win = null
+    winMap.set(templateKey, win)
   })
+
+  console.log('winmap set tempalteKey: ' + templateKey)
+  winMap.set(templateKey, win)
 }
 
 rfqMessageHandler.initRenderRfqMessage(function (event, templateKey) {
@@ -39,37 +43,60 @@ rfqMessageHandler.initRenderRfqMessage(function (event, templateKey) {
   }
 })
 
+rfqMessageHandler.closeWindow(function (event, tempalteKey) {
+  console.log(tempalteKey)
+  if (winMap.has(tempalteKey)) {
+    console.log(" close tempalteKey:" + tempalteKey)
+    var closeWindow = winMap.get(tempalteKey)
+    closeWindow.close()
+    winMap.set(tempalteKey, null)
+  }
+})
+
 kafkaMessageEvent.onMessage(function (message) {
   var rfqMessage = eval("(" + message + ")")
-  // console.log('rfqMessage:')
-  // console.log(rfqMessage)
   var templateKey = rfqMessage.rfqProperties[0].value
   var rfqId = rfqMessage.rfqHeader.rfqId
+  var isExist = false
   console.log('tempalteKey: ' + templateKey)
   console.log('rfqId: ' + rfqId)
   if (rfqMessageMap.has(templateKey)) {
     var rfqMessages = rfqMessageMap.get(templateKey)
-    if (rfqMessages == undefined || rfqMessages == null) {
-      rfqMessages = new Array()
-    }
-    // rfqMessages.forEach(element => {
-    //   if(element.rfqHeader.rfqId == rfqId){
+    rfqMessages.forEach((item, index) => {
+      if (!isExist) {
+        if (item.rfqHeader.rfqId == rfqId) {
+          if (rfqMessage.rfqHeader.routingtargets.indexOf("closerole:") > -1) {
+            console.log('delete rfqId: ' + rfqId)
+            rfqMessages.splice(index, 1)
+          }
+          else {
+            console.log('update rfqId: ' + rfqId)
+            rfqMessages[index] = rfqMessage
+          }
+          isExist = true;
+        }
+      }
+    })
 
-    //   }
-    // })
-    rfqMessages.push(rfqMessage)
+    if (!isExist) {
+      rfqMessages.unshift(rfqMessage)
+    }
     rfqMessageMap.set(templateKey, rfqMessages)
+
   } else {
     var rfqMessages = new Array()
-    rfqMessages.push(rfqMessage)
+    rfqMessages.unshift(rfqMessage)
     rfqMessageMap.set(templateKey, rfqMessages)
   }
 
-  if (win == null) {
-    createWindow();
+  var window = winMap.get(templateKey)
+  if (window == undefined || window == null) {
+    if (rfqMessage.rfqHeader.routingtargets.indexOf("popuprole:") > -1) {
+      createWindow(templateKey)
+    }
   }
   else {
-    win.webContents.send(templateKey, rfqMessage)
+    window.webContents.send(templateKey, rfqMessage)
   }
 })
 

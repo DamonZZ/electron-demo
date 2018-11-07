@@ -2,29 +2,224 @@
 <html>
 
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
+  <title>iview example</title>
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/iview@3.1.3/dist/styles/iview.css">
+  <script type="text/javascript" src="https://cdn.staticfile.org/vue/2.5.17/vue.min.js"></script>
+  <script type="text/javascript" src="https://unpkg.com/iview@3.1.3/dist/iview.min.js"></script>
+  <style type="text/css">
+    body {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      right: 0px;
+      bottom: 0px;
+      padding: 0;
+      margin: 0;
+    }
 
-  <title></title>
+    .layout {
+      border: 1px solid #d7dde4;
+      background: #f5f7f9;
+      position: relative;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .ivu-layout {
+      height: 100%;
+    }
+
+    .layout-header-bar {
+      background: #fff;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, .1);
+      height: 42x;
+    }
+
+    .layout-logo-left {
+      width: 90%;
+      height: 30px;
+      background: #fff;
+      border-radius: 3px;
+      margin: 15px auto;
+    }
+
+    .menu-icon {
+      transition: all .3s;
+    }
+
+    .rotate-icon {
+      transform: rotate(-90deg);
+    }
+
+    .menu-item span {
+      display: inline-block;
+      overflow: hidden;
+      width: 150px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: bottom;
+      transition: width .2s ease .2s;
+    }
+
+    .menu-item i {
+      transform: translateX(0px);
+      transition: font-size .2s ease, transform .2s ease;
+      vertical-align: middle;
+      font-size: 16px;
+    }
+
+    .collapsed-menu span {
+      width: 0px;
+      transition: width .2s ease;
+    }
+
+    .collapsed-menu i {
+      transform: translateX(5px);
+      transition: font-size .2s ease .2s, transform .2s ease .2s;
+      vertical-align: middle;
+      font-size: 22px;
+    }
+  </style>
 </head>
 
 <body>
-  <div id="main">
-
+  <div id="app" :style="{'height': '100%'}">
+    <Layout>
+      <Sider ref="side1" hide-trigger collapsible :collapsed-width="78" v-model="isCollapsed" :style="{background: '#fff','width': '240px','min-width': '240px','height': '100%'}">
+        <i-menu ref="menu1" theme="light" width="auto" :active-name="selctedIndex" :class="menuitemClasses" @on-select="rfqMessageSelected">
+          <menu-item v-for="(message,index) in rfqMessages" :name="message.rfqHeader.rfqId">
+            <Icon type="ios-navigate"></Icon>
+            <span>{{message.rfqHeader.rfqId}}</span>
+          </menu-item>
+        </i-menu>
+      </Sider>
+      <Layout>
+        <Header :style="{padding: 0}" class="layout-header-bar">
+          <Icon @click.native="collapsedSider" :class="rotateIcon" :style="{margin: '0 20px'}" type="md-menu" size="30"></Icon>
+        </Header>
+        <Content :style="{margin: '20px', background: '#fff', height: '100%'}">
+          <Alert show-icon v-if="selectedRfqMessage.rfqHeader">{{selectedRfqMessage.rfqHeader.rfqId}}</Alert>
+          <Alert type="success" show-icon v-if="selectedRfqMessage.rfqHeader">{{selectedRfqMessage.rfqHeader.version}}</Alert>
+          <Alert type="warning" show-icon v-if="selectedRfqMessage.rfqHeader" v-for="(property,index) in selectedRfqMessage.rfqProperties">{{property.value}}</Alert>
+          <!-- <Alert type="error" show-icon>An error prompt</Alert>
+          <span v-if="selectedRfqMessage.rfqHeader">
+            {{selectedRfqMessage.rfqHeader.rfqId}}
+          </span>
+          <br>
+          <span v-if="selectedRfqMessage.rfqHeader">
+            {{selectedRfqMessage.rfqHeader.version}}
+          </span>
+          <br>
+          <span v-if="selectedRfqMessage.rfqHeader" v-for="(property,index) in selectedRfqMessage.rfqProperties">
+            {{property.value}}
+            <br>
+          </span> -->
+        </Content>
+      </Layout>
+    </Layout>
   </div>
   <script>
+
+    var vue = new Vue({
+      el: '#app',
+      data: {
+        isCollapsed: false,
+        rfqMessages: [],
+        selctedIndex: 0,
+        selectedRfqMessage: ''
+      },
+      computed: {
+        rotateIcon() {
+          return [
+            'menu-icon',
+            this.isCollapsed ? 'rotate-icon' : ''
+          ];
+        },
+        menuitemClasses() {
+          return [
+            'menu-item',
+            this.isCollapsed ? 'collapsed-menu' : ''
+          ]
+        }
+      },
+      methods: {
+        collapsedSider() {
+          this.$refs.side1.toggleCollapse();
+        },
+        rfqMessageSelected(rfqId) {
+          this.rfqMessages.forEach(element => {
+            if (element.rfqHeader.rfqId == rfqId) {
+              this.selectedRfqMessage = element
+              this.selctedIndex = rfqId
+              this.updateMenuActiveName()
+            }
+          })
+        },
+        updateMenuActiveName() {
+          this.$nextTick(function () {
+            this.$refs.menu1.updateOpened();
+            this.$refs.menu1.updateActiveName();
+          });
+        }
+      }
+    })
+
     const ipcRenderer = require('electron').ipcRenderer
     ipcRenderer.send('initRfqMessage', 'testTemplateKey')
     ipcRenderer.on('testTemplateKey', function (event, rfqMessages) {
       if (rfqMessages != null || rfqMessages != undefined) {
         if (Array.isArray(rfqMessages)) {
-          rfqMessages.forEach(element => {
-            document.getElementById("main").innerText += element.rfqHeader.rfqId;
-          })
+          console.log("messages coming...")
+          console.log(rfqMessages)
+          vue.rfqMessages = rfqMessages
+          vue.selectedRfqMessage = rfqMessages[0]
+          vue.selctedIndex = vue.selectedRfqMessage.rfqHeader.rfqId
+          vue.updateMenuActiveName()
         } else {
-          document.getElementById("main").innerText += rfqMessages.rfqHeader.rfqId;
+          console.log("message coming...")
+          console.log(rfqMessages)
+          var rfqId = rfqMessages.rfqHeader.rfqId;
+          var isExist = false
+          vue.rfqMessages.forEach((item, index) => {
+            if (!isExist) {
+              if (item.rfqHeader.rfqId == rfqId) {
+                console.log("message update...")
+                if (rfqMessages.rfqHeader.routingtargets.indexOf("closerole:") > -1) {
+                  console.log("message delete...")
+                  vue.rfqMessages.splice(index, 1)
+                  if (vue.rfqMessages.length > 0) {
+                    var selectedIndex = index - 1
+                    console.log("update selectedIndex:" + selectedIndex)
+                    if (selectedIndex < 0) {
+                      vue.selectedRfqMessage = vue.rfqMessages[index]
+                      vue.selctedIndex = vue.selectedRfqMessage.rfqHeader.rfqId
+                    } else {
+                      vue.selectedRfqMessage = vue.rfqMessages[selectedIndex]
+                      vue.selctedIndex = vue.selectedRfqMessage.rfqHeader.rfqId
+                    }
+                  } else {
+                    ipcRenderer.send('close', 'testTemplateKey')
+                  }
+                }
+                else {
+                  vue.$set(vue.rfqMessages, index, rfqMessages)
+                  if (vue.selctedIndex == item.rfqHeader.rfqId) {
+                    vue.selectedRfqMessage = vue.rfqMessages[index]
+                  }
+                }
+                isExist = true
+              }
+            }
+          })
+          if (!isExist) {
+            vue.rfqMessages.unshift(rfqMessages)
+          }
+          vue.updateMenuActiveName()
         }
       }
     })
+
   </script>
 </body>
 
